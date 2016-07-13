@@ -1,23 +1,5 @@
-'use strict';
+'use strict'
 
-// Messenger API integration example
-// We assume you have:
-// * a Wit.ai bot setup (https://wit.ai/docs/quickstart)
-// * a Messenger Platform setup (https://developers.facebook.com/docs/messenger-platform/quickstart)
-// You need to `npm install` the following dependencies: body-parser, express, request.
-//
-// 1. npm install body-parser express request
-// 2. Download and install ngrok from https://ngrok.com/download
-// 3. ./ngrok http 8445
-// 4. WIT_TOKEN=your_access_token FB_APP_SECRET=your_app_secret FB_PAGE_TOKEN=your_page_token node examples/messenger.js
-// 5. Subscribe your page to the Webhooks using verify_token and `https://<your_ngrok_io>/webhook` as callback URL.
-// 6. Talk to your bot on Messenger!
-
-const bodyParser = require('body-parser');
-const crypto = require('crypto');
-const express = require('express');
-const fetch = require('node-fetch');
-const request = require('request');
 
 let Wit = null;
 let log = null;
@@ -30,26 +12,16 @@ try {
   log = require('node-wit').log;
 }
 
-// Webserver parameter
-const PORT = process.env.PORT || 8445;
+// const actions = {
+//   send(request, response) {
+//     const {sessionId, context, entities} = request;
+//     const {text, quickreplies} = response;
+//     return new Promise(function(resolve, reject) {
+//       return resolve(response);
+//     });
+//   },
+// };
 
-// Wit.ai parameters
-const WIT_TOKEN = process.env.WIT_TOKEN;
-
-// Messenger API parameters
-// const FB_PAGE_ID = process.env.FB_PAGE_ID;
-// if (!FB_PAGE_ID) { throw new Error('missing FB_PAGE_ID') }
-const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
-if (!FB_PAGE_TOKEN) { throw new Error('missing FB_PAGE_TOKEN') }
-const FB_APP_SECRET = process.env.FB_APP_SECRET;
-if (!FB_APP_SECRET) { throw new Error('missing FB_APP_SECRET') }
-
-let FB_VERIFY_TOKEN = null;
-crypto.randomBytes(8, (err, buff) => {
-  if (err) throw err;
-  FB_VERIFY_TOKEN = buff.toString('hex');
-  console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
-});
 
 // ----------------------------------------------------------------------------
 // Messenger API specific code
@@ -132,6 +104,11 @@ const actions = {
   // See https://wit.ai/docs/quickstart
 };
 
+// Wit.ai parameters
+const WIT_TOKEN = process.env.WIT_TOKEN;
+// Messenger API parameters
+const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+
 // Setting up our bot
 const wit = new Wit({
   accessToken: WIT_TOKEN,
@@ -139,119 +116,176 @@ const wit = new Wit({
   logger: new log.Logger(log.INFO)
 });
 
-// Starting our webserver and putting it all together
-const app = express();
-app.use(({method, url}, rsp, next) => {
-  rsp.on('finish', () => {
-    console.log(`${rsp.statusCode} ${method} ${url}`);
-  });
-  next();
-});
-app.use(bodyParser.json({ verify: verifyRequestSignature }));
 
-// Webhook setup
-app.get('/webhook', (req, res) => {
-  if (req.query['hub.mode'] === 'subscribe' &&
-    req.query['hub.verify_token'] === FB_VERIFY_TOKEN) {
-    res.send(req.query['hub.challenge']);
-  } else {
-    res.sendStatus(400);
-  }
-});
+const express = require('express')
+const bodyParser = require('body-parser')
+const request = require('request')
+const app = express()
 
-// Message handler
-app.post('/webhook', (req, res) => {
-  // Parse the Messenger payload
-  // See the Webhook reference
-  // https://developers.facebook.com/docs/messenger-platform/webhook-reference
-  const data = req.body;
+app.set('port', (process.env.PORT || 5000))
 
-  if (data.object === 'page') {
-    data.entry.forEach(entry => {
-      entry.messaging.forEach(event => {
-        if (event.message) {
-          // Yay! We got a new message!
-          // We retrieve the Facebook user ID of the sender
-          const sender = event.sender.id;
+// Process application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({extended: false}))
 
-          // We retrieve the user's current session, or create one if it doesn't exist
-          // This is needed for our bot to figure out the conversation history
-          const sessionId = findOrCreateSession(sender);
+// Process application/json
+app.use(bodyParser.json())
 
-          // We retrieve the message content
-          const {text, attachments} = event.message;
+// Index route
+app.get('/', function (req, res) {
+    res.send('Hello world, I am a chat bot')
+})
 
-          if (attachments) {
-            // We received an attachment
-            // Let's reply with an automatic message
-            fbMessage(sender, 'Sorry I can only process text messages for now.')
-            .catch(console.error);
-          } else if (text) {
-            // We received a text message
+// for Facebook verification
+app.get('/webhook/', function (req, res) {
+    if (req.query['hub.verify_token'] === 'my_voice_is_my_password_verify_me') {
+        res.send(req.query['hub.challenge'])
+    }
+    res.send('Error, wrong token')
+})
 
-            // Let's forward the message to the Wit.ai Bot Engine
-            // This will run all actions until our bot has nothing left to do
-            wit.runActions(
-              sessionId, // the user's current session
-              text, // the user's message
-              sessions[sessionId].context // the user's current session state
-            ).then((context) => {
-              // Our bot did everything it has to do.
-              // Now it's waiting for further messages to proceed.
-              console.log('Waiting for next user messages');
+// Spin up the server
+app.listen(app.get('port'), function() {
+    console.log('running on port', app.get('port'))
+})
 
-              // Based on the session state, you might want to reset the session.
-              // This depends heavily on the business logic of your bot.
-              // Example:
-              // if (context['done']) {
-              //   delete sessions[sessionId];
-              // }
+// app.post('/webhook/', function (req, res) {
+//     let messaging_events = req.body.entry[0].messaging
+//     for (let i = 0; i < messaging_events.length; i++) {
+//         let event = req.body.entry[0].messaging[i]
+//         let sender = event.sender.id
+//         if (event.message && event.message.text) {
+//             let text = event.message.text
+//             sendTextMessage(sender, "Text received, echo: " + text.substring(0, 200))
+//         }
+//     }
+//     res.sendStatus(200)
+// })
 
-              // Updating the user's current session state
-              sessions[sessionId].context = context;
-            })
-            .catch((err) => {
-              console.error('Oops! Got an error from Wit: ', err.stack || err);
-            })
-          }
-        } else {
-          console.log('received event', JSON.stringify(event));
-        }
-      });
-    });
-  }
-  res.sendStatus(200);
-});
+app.post('/webhook/', function (req, res) {
+  let messaging_events = req.body.entry[0].messaging
+  for (let i = 0; i < messaging_events.length; i++) {
+    let event = req.body.entry[0].messaging[i]
+    let sender = event.sender.id
+    if (event.message && event.message.text) {
+      const {text, attachments} = event.message;
+      if (text === 'Generic') {
+        sendGenericMessage(sender)
+        continue
+      }
+      const sender = event.sender.id;
+      // We retrieve the user's current session, or create one if it doesn't exist
+      // This is needed for our bot to figure out the conversation history
+      const sessionId = findOrCreateSession(sender);
 
-/*
- * Verify that the callback came from Facebook. Using the App Secret from
- * the App Dashboard, we can verify the signature that is sent with each
- * callback in the x-hub-signature field, located in the header.
- *
- * https://developers.facebook.com/docs/graph-api/webhooks#setup
- *
- */
-function verifyRequestSignature(req, res, buf) {
-  var signature = req.headers["x-hub-signature"];
+    if (attachments) {
+        // We received an attachment
+        // Let's reply with an automatic message
+        sendTextMessage(sender, 'Sorry I can only process text messages for now.')
+        .catch(console.error);
+      } else if (text) {
+        // We received a text message
 
-  if (!signature) {
-    // For testing, let's log an error. In production, you should throw an
-    // error.
-    console.error("Couldn't validate the signature.");
-  } else {
-    var elements = signature.split('=');
-    var method = elements[0];
-    var signatureHash = elements[1];
+        // Let's forward the message to the Wit.ai Bot Engine
+        // This will run all actions until our bot has nothing left to do
+        wit.runActions(
+          sessionId, // the user's current session
+          text, // the user's message
+          sessions[sessionId].context // the user's current session state
+        ).then((context) => {
+          // Our bot did everything it has to do.
+          // Now it's waiting for further messages to proceed.
+          console.log('Waiting for next user messages');
 
-    var expectedHash = crypto.createHmac('sha1', FB_APP_SECRET)
-                        .update(buf)
-                        .digest('hex');
+          // Based on the session state, you might want to reset the session.
+          // This depends heavily on the business logic of your bot.
+          // Example:
+          // if (context['done']) {
+          //   delete sessions[sessionId];
+          // }
 
-    if (signatureHash != expectedHash) {
-      throw new Error("Couldn't validate the request signature.");
+          // Updating the user's current session state
+          sessions[sessionId].context = context;
+        })
+        .catch((err) => {
+          console.error('Oops! Got an error from Wit: ', err.stack || err);
+        })
+      }
+
+      // sendTextMessage(sender, "Text received, echo: " + text.substring(0, 200))
+    }
+    if (event.postback) {
+      let text = JSON.stringify(event.postback)
+      sendTextMessage(sender, "Postback received: "+text.substring(0, 200), token)
+      continue
     }
   }
+  res.sendStatus(200)
+})
+
+function sendTextMessage(sender, text) {
+    let messageData = { text:text }
+    request({
+        url: 'https://graph.facebook.com/v2.6/me/messages',
+        qs: {access_token: FB_PAGE_TOKEN},
+        method: 'POST',
+        json: {
+            recipient: {id:sender},
+            message: messageData,
+        }
+    }, function(error, response, body) {
+        if (error) {
+            console.log('Error sending messages: ', error)
+        } else if (response.body.error) {
+            console.log('Error: ', response.body.error)
+        }
+    })
 }
 
-app.listen(PORT);
-console.log('Listening on :' + PORT + '...');
+function sendGenericMessage(sender) {
+  let messageData = {
+      "attachment": {
+          "type": "template",
+          "payload": {
+              "template_type": "generic",
+              "elements": [{
+                  "title": "First card",
+                  "subtitle": "Element #1 of an hscroll",
+                  "image_url": "http://messengerdemo.parseapp.com/img/rift.png",
+                  "buttons": [{
+                      "type": "web_url",
+                      "url": "https://www.messenger.com",
+                      "title": "web url"
+                  }, {
+                      "type": "postback",
+                      "title": "Postback",
+                      "payload": "Payload for first element in a generic bubble",
+                  }],
+              }, {
+                  "title": "Second card",
+                  "subtitle": "Element #2 of an hscroll",
+                  "image_url": "http://messengerdemo.parseapp.com/img/gearvr.png",
+                  "buttons": [{
+                      "type": "postback",
+                      "title": "Postback",
+                      "payload": "Payload for second element in a generic bubble",
+                  }],
+              }]
+          }
+      }
+  }
+  request({
+      url: 'https://graph.facebook.com/v2.6/me/messages',
+      qs: {access_token: FB_PAGE_TOKEN},
+      method: 'POST',
+      json: {
+          recipient: {id:sender},
+          message: messageData,
+      }
+  }, function(error, response, body) {
+      if (error) {
+          console.log('Error sending messages: ', error)
+      } else if (response.body.error) {
+          console.log('Error: ', response.body.error)
+      }
+  })
+}
